@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Songs — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=Space+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="admin.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#0f0b08;color:#f2e8d8;font-family:'Manrope',sans-serif;padding:6vw;max-width:800px;margin:0 auto;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .topbar a{color:#b08d57;text-decoration:none;font-size:13px;}
+  h1{margin:20px 0 26px;}
+  .btn{background:transparent;border:1px solid rgba(242,232,216,.3);color:#f2e8d8;padding:10px 18px;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;}
+  .btn:hover{border-color:#b08d57;color:#b08d57;}
+  .btn-primary{background:#f2e8d8;color:#0f0b08;border:none;}
+  .btn-primary:hover{background:#b08d57;color:#0f0b08;}
+  .btn-danger{border-color:#e05c4a;color:#e05c4a;}
+  .btn-danger:hover{background:#e05c4a;color:#0f0b08;}
+
+  .form-card{border:1px solid rgba(242,232,216,.15);border-radius:10px;padding:24px;margin-bottom:30px;}
+  .form-card h2{font-size:16px;margin-bottom:16px;}
+  label{display:block;font-size:13px;margin-bottom:6px;color:#c9bba3;}
+  input,select{width:100%;background:transparent;border:1px solid rgba(242,232,216,.25);border-radius:6px;padding:11px 14px;color:#f2e8d8;font-size:14px;margin-bottom:16px;font-family:inherit;}
+  select option{background:#0f0b08;}
+  input:focus,select:focus{outline:none;border-color:#b08d57;}
+  .form-row{display:flex;gap:20px;}
+  .checkbox-row{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+  .checkbox-row input{width:auto;margin:0;}
+  .checkbox-row label{margin:0;}
+  .hint{font-size:12px;color:#8a7c68;margin-top:-10px;margin-bottom:16px;}
+
+  .filter-tabs{display:flex;gap:8px;margin-bottom:16px;}
+  .filter-tabs button{background:transparent;border:1px solid rgba(242,232,216,.2);color:#8a7c68;padding:8px 16px;border-radius:20px;font-size:12px;cursor:pointer;font-family:'Space Mono',monospace;}
+  .filter-tabs button.active{border-color:#b08d57;color:#b08d57;}
+
+  .slist{display:flex;flex-direction:column;gap:10px;}
+  .srow{display:flex;align-items:center;gap:14px;border:1px solid rgba(242,232,216,.1);border-radius:8px;padding:10px;}
+  .srow img{width:50px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0;background:#1a1410;}
+  .srow-info{flex:1;min-width:0;}
+  .srow-info h3{font-size:14px;margin-bottom:2px;}
+  .srow-info p{font-size:12px;color:#8a7c68;}
+  .srow-actions{display:flex;gap:6px;flex-shrink:0;}
+  .srow-actions button{font-size:11px;padding:6px 10px;}
+  .empty-msg{color:#8a7c68;padding:20px 0;text-align:center;}
+  .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(212,164,100,.15);color:#b08d57;margin-left:6px;}
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="dashboard.html">← Dashboard</a>
+    <button class="btn" onclick="adminLogout()">Log Out</button>
+  </div>
+
+  <h1>Songs</h1>
+
+  <div class="form-card">
+    <h2 id="formTitle">Add New Song</h2>
+    <form id="songForm">
+      <label>Category</label>
+      <select id="sCategory" required>
+        <option value="single">Single</option>
+        <option value="collab">Collaboration</option>
+        <option value="album">Album / EP</option>
+      </select>
+      <label>Title</label>
+      <input type="text" id="sTitle" required placeholder="Omo Ologo">
+      <div class="form-row">
+        <div style="flex:1;">
+          <label>Year</label>
+          <input type="text" id="sYear" required placeholder="2026">
+        </div>
+        <div style="flex:1;">
+          <label>Order Position (1 = shown first)</label>
+          <input type="number" id="sPosition" placeholder="1">
+        </div>
+      </div>
+      <label>Streaming / Listen Link</label>
+      <input type="text" id="sLink" required placeholder="https://fanlink.tv/...">
+      <label>Cover Photo</label>
+      <input type="file" id="sCoverFile" accept="image/*">
+      <p class="hint" id="currentCoverHint"></p>
+      <div class="checkbox-row">
+        <input type="checkbox" id="sLatest">
+        <label for="sLatest">Feature as "Latest Release" on the Music page</label>
+      </div>
+      <button type="submit" class="btn btn-primary" id="saveBtn">Add Song</button>
+      <button type="button" class="btn" id="cancelEditBtn" style="display:none;margin-left:10px;">Cancel</button>
+    </form>
+  </div>
+
+  <div class="filter-tabs">
+    <button class="active" data-cat="all">All</button>
+    <button data-cat="single">Singles</button>
+    <button data-cat="collab">Collabs</button>
+    <button data-cat="album">Albums/EP</button>
+  </div>
+
+  <div class="slist" id="songList"></div>
+  <p class="empty-msg" id="emptyMsg" style="display:none;">No songs in this category yet.</p>
+
+<script>
+  let editingId = null;
+  let editingCoverUrl = null;
+  let currentFilter = 'all';
+  let allSongs = [];
+
+  (async () => {
+    await requireAdminAuth();
+    loadSongs();
+  })();
+
+  document.querySelectorAll('.filter-tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-tabs button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.cat;
+      renderSongs();
+    });
+  });
+
+  async function loadSongs() {
+    const { data, error } = await adminClient
+      .from('songs')
+      .select('*')
+      .order('category', { ascending: true })
+      .order('position', { ascending: true, nullsFirst: false });
+    allSongs = (!error && data) ? data : [];
+    renderSongs();
+  }
+
+  function renderSongs() {
+    const list = document.getElementById('songList');
+    const emptyMsg = document.getElementById('emptyMsg');
+    const filtered = currentFilter === 'all' ? allSongs : allSongs.filter(s => s.category === currentFilter);
+    list.innerHTML = '';
+    if (filtered.length === 0) {
+      emptyMsg.style.display = 'block';
+      return;
+    }
+    emptyMsg.style.display = 'none';
+    filtered.forEach(s => {
+      const row = document.createElement('div');
+      row.className = 'srow';
+      row.innerHTML = `
+        <img src="${s.cover_url || ''}" alt="">
+        <div class="srow-info">
+          <h3>${s.title || ''} ${s.is_latest_release ? '<span class="badge">LATEST</span>' : ''}</h3>
+          <p>${s.category} · ${s.year || ''} · position ${s.position ?? '—'}</p>
+        </div>
+        <div class="srow-actions">
+          <button class="btn" onclick='editSong(${JSON.stringify(s).replace(/'/g, "&#39;")})'>Edit</button>
+          <button class="btn btn-danger" onclick="deleteSong('${s.id}')">Delete</button>
+        </div>
+      `;
+      list.appendChild(row);
+    });
+  }
+
+  function editSong(s) {
+    editingId = s.id;
+    editingCoverUrl = s.cover_url || null;
+    document.getElementById('sCategory').value = s.category || 'single';
+    document.getElementById('sTitle').value = s.title || '';
+    document.getElementById('sYear').value = s.year || '';
+    document.getElementById('sPosition').value = s.position ?? '';
+    document.getElementById('sLink').value = s.link || '';
+    document.getElementById('sLatest').checked = !!s.is_latest_release;
+    document.getElementById('currentCoverHint').textContent = s.cover_url ? 'Current cover: ' + s.cover_url : '';
+    document.getElementById('formTitle').textContent = 'Edit Song';
+    document.getElementById('saveBtn').textContent = 'Save Changes';
+    document.getElementById('cancelEditBtn').style.display = 'inline-block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function resetForm() {
+    editingId = null;
+    editingCoverUrl = null;
+    document.getElementById('songForm').reset();
+    document.getElementById('currentCoverHint').textContent = '';
+    document.getElementById('formTitle').textContent = 'Add New Song';
+    document.getElementById('saveBtn').textContent = 'Add Song';
+    document.getElementById('cancelEditBtn').style.display = 'none';
+  }
+  document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
+
+  async function uploadCover(file) {
+    const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
+    const { error } = await adminClient.storage.from('covers').upload(fileName, file);
+    if (error) throw error;
+    const { data } = adminClient.storage.from('covers').getPublicUrl(fileName);
+    return data.publicUrl;
+  }
+
+  document.getElementById('songForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const saveBtn = document.getElementById('saveBtn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+
+    let coverUrl = editingCoverUrl;
+    const file = document.getElementById('sCoverFile').files[0];
+    if (file) {
+      try {
+        coverUrl = await uploadCover(file);
+      } catch (err) {
+        alert('Cover upload failed: ' + err.message);
+        saveBtn.disabled = false;
+        saveBtn.textContent = editingId ? 'Save Changes' : 'Add Song';
+        return;
+      }
+    }
+
+    const posVal = document.getElementById('sPosition').value;
+    const isLatest = document.getElementById('sLatest').checked;
+
+    // Only one song should ever be "Latest Release" — unset any previous one first
+    if (isLatest) {
+      await adminClient.from('songs').update({ is_latest_release: false }).eq('is_latest_release', true);
+    }
+
+    const payload = {
+      category: document.getElementById('sCategory').value,
+      title: document.getElementById('sTitle').value,
+      year: document.getElementById('sYear').value,
+      link: document.getElementById('sLink').value,
+      cover_url: coverUrl,
+      position: posVal ? parseInt(posVal, 10) : null,
+      is_latest_release: isLatest,
+    };
+
+    if (editingId) {
+      await adminClient.from('songs').update(payload).eq('id', editingId);
+    } else {
+      await adminClient.from('songs').insert([payload]);
+    }
+    resetForm();
+    loadSongs();
+  });
+
+  async function deleteSong(id) {
+    if (!confirm('Delete this song?')) return;
+    await adminClient.from('songs').delete().eq('id', id);
+    loadSongs();
+  }
+</script>
+
+</body>
+</html>

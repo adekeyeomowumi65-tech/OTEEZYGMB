@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Login — OTEEZYGMB</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=Space+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="admin.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#0f0b08;color:#f2e8d8;font-family:'Manrope',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:6vw;}
+  .login-card{width:100%;max-width:360px;}
+  .login-title{font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:#b08d57;text-align:center;margin-bottom:8px;}
+  h1{text-align:center;font-size:24px;margin-bottom:30px;font-weight:700;}
+  label{display:block;font-size:13px;margin-bottom:6px;color:#c9bba3;}
+  input{width:100%;background:transparent;border:1px solid rgba(242,232,216,.25);border-radius:6px;padding:12px 14px;color:#f2e8d8;font-size:15px;margin-bottom:18px;font-family:inherit;}
+  input:focus{outline:none;border-color:#b08d57;}
+  button{width:100%;background:#f2e8d8;color:#0f0b08;border:none;padding:14px;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.15em;text-transform:uppercase;border-radius:6px;cursor:pointer;}
+  button:hover{background:#b08d57;}
+  button:disabled{opacity:.5;cursor:default;}
+  .error{color:#e05c4a;font-size:13px;text-align:center;margin-top:14px;min-height:16px;}
+</style>
+</head>
+<body>
+
+  <div class="login-card">
+    <p class="login-title">OTEEZYGMB</p>
+    <h1>Admin Login</h1>
+    <form id="loginForm">
+      <label>Email</label>
+      <input type="email" id="email" required>
+      <label>Password</label>
+      <input type="password" id="password" required>
+      <button type="submit" id="loginBtn">Sign In</button>
+      <p class="error" id="loginError"></p>
+    </form>
+  </div>
+
+<script>
+  // If already logged in, skip straight to the dashboard
+  adminClient.auth.getSession().then(({ data: { session } }) => {
+    if (session) window.location.href = 'dashboard.html';
+  });
+
+  const form = document.getElementById('loginForm');
+  const btn = document.getElementById('loginBtn');
+  const errorEl = document.getElementById('loginError');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+    errorEl.textContent = '';
+
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+
+    const { error } = await adminClient.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      errorEl.textContent = 'Incorrect email or password.';
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+    } else {
+      window.location.href = 'dashboard.html';
+    }
+  });
+</script>
+
+</body>
+</html>

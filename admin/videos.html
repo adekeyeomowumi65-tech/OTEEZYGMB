@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Videos — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=Space+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="admin.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#0f0b08;color:#f2e8d8;font-family:'Manrope',sans-serif;padding:6vw;max-width:800px;margin:0 auto;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .topbar a{color:#b08d57;text-decoration:none;font-size:13px;}
+  h1{margin:20px 0 26px;}
+  .btn{background:transparent;border:1px solid rgba(242,232,216,.3);color:#f2e8d8;padding:10px 18px;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;}
+  .btn:hover{border-color:#b08d57;color:#b08d57;}
+  .btn-primary{background:#f2e8d8;color:#0f0b08;border:none;}
+  .btn-primary:hover{background:#b08d57;color:#0f0b08;}
+  .btn-danger{border-color:#e05c4a;color:#e05c4a;}
+  .btn-danger:hover{background:#e05c4a;color:#0f0b08;}
+
+  .form-card{border:1px solid rgba(242,232,216,.15);border-radius:10px;padding:24px;margin-bottom:30px;}
+  .form-card h2{font-size:16px;margin-bottom:16px;}
+  label{display:block;font-size:13px;margin-bottom:6px;color:#c9bba3;}
+  input{width:100%;background:transparent;border:1px solid rgba(242,232,216,.25);border-radius:6px;padding:11px 14px;color:#f2e8d8;font-size:14px;margin-bottom:16px;font-family:inherit;}
+  input:focus{outline:none;border-color:#b08d57;}
+  .form-row{display:flex;gap:20px;}
+  .hint{font-size:12px;color:#8a7c68;margin-top:-10px;margin-bottom:16px;}
+
+  .vlist{display:flex;flex-direction:column;gap:10px;}
+  .vrow{display:flex;align-items:center;gap:14px;border:1px solid rgba(242,232,216,.1);border-radius:8px;padding:10px;}
+  .vrow img{width:80px;height:45px;object-fit:cover;border-radius:4px;flex-shrink:0;}
+  .vrow-info{flex:1;min-width:0;}
+  .vrow-info h3{font-size:14px;margin-bottom:2px;}
+  .vrow-info p{font-size:12px;color:#8a7c68;}
+  .vrow-actions{display:flex;gap:6px;flex-shrink:0;}
+  .vrow-actions button{font-size:11px;padding:6px 10px;}
+  .empty-msg{color:#8a7c68;padding:20px 0;text-align:center;}
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="dashboard.html">← Dashboard</a>
+    <button class="btn" onclick="adminLogout()">Log Out</button>
+  </div>
+
+  <h1>Videos</h1>
+
+  <div class="form-card">
+    <h2 id="formTitle">Add New Video</h2>
+    <form id="videoForm">
+      <label>YouTube Link or Video ID</label>
+      <input type="text" id="vUrl" required placeholder="https://youtu.be/kFhgV7FIX-I">
+      <p class="hint">Paste the full YouTube link — the ID gets pulled out automatically.</p>
+      <label>Title</label>
+      <input type="text" id="vTitle" required placeholder="G & S Freestyle [MTO7]">
+      <div class="form-row">
+        <div style="flex:1;">
+          <label>Channel Name</label>
+          <input type="text" id="vChannel" value="OTEEZYGMB">
+        </div>
+        <div style="flex:1;">
+          <label>Order Position (1 = shown first)</label>
+          <input type="number" id="vPosition" placeholder="1">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary" id="saveBtn">Add Video</button>
+      <button type="button" class="btn" id="cancelEditBtn" style="display:none;margin-left:10px;">Cancel</button>
+    </form>
+  </div>
+
+  <div class="vlist" id="videoList"></div>
+  <p class="empty-msg" id="emptyMsg" style="display:none;">No videos yet — add your first one above.</p>
+
+<script>
+  let editingId = null;
+
+  function extractYouTubeId(input) {
+    input = input.trim();
+    const patterns = [
+      /(?:youtu\.be\/)([^?&]+)/,
+      /(?:youtube\.com\/watch\?v=)([^&]+)/,
+      /(?:youtube\.com\/embed\/)([^?&]+)/
+    ];
+    for (const p of patterns) {
+      const m = input.match(p);
+      if (m) return m[1];
+    }
+    return input; // assume they pasted a raw ID
+  }
+
+  (async () => {
+    await requireAdminAuth();
+    loadVideos();
+  })();
+
+  async function loadVideos() {
+    const { data, error } = await adminClient
+      .from('videos')
+      .select('*')
+      .order('position', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true });
+
+    const list = document.getElementById('videoList');
+    const emptyMsg = document.getElementById('emptyMsg');
+    list.innerHTML = '';
+    if (error || !data || data.length === 0) {
+      emptyMsg.style.display = 'block';
+      return;
+    }
+    emptyMsg.style.display = 'none';
+    data.forEach(v => {
+      const row = document.createElement('div');
+      row.className = 'vrow';
+      row.innerHTML = `
+        <img src="https://img.youtube.com/vi/${v.youtube_id}/default.jpg" alt="">
+        <div class="vrow-info">
+          <h3>${v.title || ''}</h3>
+          <p>${v.channel || ''} · position ${v.position ?? '—'}</p>
+        </div>
+        <div class="vrow-actions">
+          <button class="btn" onclick='editVideo(${JSON.stringify(v)})'>Edit</button>
+          <button class="btn btn-danger" onclick="deleteVideo('${v.id}')">Delete</button>
+        </div>
+      `;
+      list.appendChild(row);
+    });
+  }
+
+  function editVideo(v) {
+    editingId = v.id;
+    document.getElementById('vUrl').value = v.youtube_id || '';
+    document.getElementById('vTitle').value = v.title || '';
+    document.getElementById('vChannel').value = v.channel || '';
+    document.getElementById('vPosition').value = v.position ?? '';
+    document.getElementById('formTitle').textContent = 'Edit Video';
+    document.getElementById('saveBtn').textContent = 'Save Changes';
+    document.getElementById('cancelEditBtn').style.display = 'inline-block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function resetForm() {
+    editingId = null;
+    document.getElementById('videoForm').reset();
+    document.getElementById('vChannel').value = 'OTEEZYGMB';
+    document.getElementById('formTitle').textContent = 'Add New Video';
+    document.getElementById('saveBtn').textContent = 'Add Video';
+    document.getElementById('cancelEditBtn').style.display = 'none';
+  }
+  document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
+
+  document.getElementById('videoForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const posVal = document.getElementById('vPosition').value;
+    const payload = {
+      youtube_id: extractYouTubeId(document.getElementById('vUrl').value),
+      title: document.getElementById('vTitle').value,
+      channel: document.getElementById('vChannel').value,
+      position: posVal ? parseInt(posVal, 10) : null,
+    };
+    if (editingId) {
+      await adminClient.from('videos').update(payload).eq('id', editingId);
+    } else {
+      await adminClient.from('videos').insert([payload]);
+    }
+    resetForm();
+    loadVideos();
+  });
+
+  async function deleteVideo(id) {
+    if (!confirm('Delete this video?')) return;
+    await adminClient.from('videos').delete().eq('id', id);
+    loadVideos();
+  }
+</script>
+
+</body>
+</html>

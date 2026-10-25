@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gallery — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=Space+Mono&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="admin.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#0f0b08;color:#f2e8d8;font-family:'Manrope',sans-serif;padding:6vw;max-width:800px;margin:0 auto;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .topbar a{color:#b08d57;text-decoration:none;font-size:13px;}
+  h1{margin:20px 0 26px;}
+  .btn{background:transparent;border:1px solid rgba(242,232,216,.3);color:#f2e8d8;padding:10px 18px;border-radius:6px;cursor:pointer;font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;}
+  .btn:hover{border-color:#b08d57;color:#b08d57;}
+  .btn-primary{background:#f2e8d8;color:#0f0b08;border:none;}
+  .btn-primary:hover{background:#b08d57;color:#0f0b08;}
+  .btn-danger{border-color:#e05c4a;color:#e05c4a;}
+  .btn-danger:hover{background:#e05c4a;color:#0f0b08;}
+
+  .form-card{border:1px solid rgba(242,232,216,.15);border-radius:10px;padding:24px;margin-bottom:30px;}
+  .form-card h2{font-size:16px;margin-bottom:16px;}
+  label{display:block;font-size:13px;margin-bottom:6px;color:#c9bba3;}
+  input{width:100%;background:transparent;border:1px solid rgba(242,232,216,.25);border-radius:6px;padding:11px 14px;color:#f2e8d8;font-size:14px;margin-bottom:16px;font-family:inherit;}
+  input:focus{outline:none;border-color:#b08d57;}
+  .form-row{display:flex;gap:20px;}
+  .hint{font-size:12px;color:#8a7c68;margin-top:-10px;margin-bottom:16px;}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;}
+  .gitem{border:1px solid rgba(242,232,216,.1);border-radius:8px;overflow:hidden;}
+  .gitem img{width:100%;height:110px;object-fit:cover;display:block;}
+  .gitem-info{padding:8px;}
+  .gitem-info p{font-size:11px;color:#8a7c68;margin-bottom:6px;}
+  .gitem-actions{display:flex;gap:6px;}
+  .gitem-actions button{flex:1;font-size:10px;padding:6px;}
+  .empty-msg{color:#8a7c68;padding:20px 0;text-align:center;}
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <a href="dashboard.html">← Dashboard</a>
+    <button class="btn" onclick="adminLogout()">Log Out</button>
+  </div>
+
+  <h1>Gallery</h1>
+
+  <div class="form-card">
+    <h2 id="formTitle">Add New Photo</h2>
+    <form id="galleryForm">
+      <label>Photo</label>
+      <input type="file" id="gFile" accept="image/*">
+            <p class="hint" id="currentImgHint"></p>
+      <label>Order Position</label>
+      <input type="number" id="gPosition" placeholder="1">
+
+      <label>Alt Text (for accessibility)</label>
+      <input type="text" id="gAlt" placeholder="Performance photo">
+      <button type="submit" class="btn btn-primary" id="saveBtn">Add Photo</button>
+      <button type="button" class="btn" id="cancelEditBtn" style="display:none;margin-left:10px;">Cancel</button>
+    </form>
+  </div>
+
+  <div class="grid" id="galleryList"></div>
+  <p class="empty-msg" id="emptyMsg" style="display:none;">No photos yet — add your first one above.</p>
+
+<script>
+  let editingId = null;
+  let editingImageUrl = null;
+
+  (async () => {
+    await requireAdminAuth();
+    loadGallery();
+  })();
+
+  async function loadGallery() {
+    const { data, error } = await adminClient
+      .from('gallery')
+      .select('*')
+      .order('position', { ascending: true, nullsFirst: false });
+
+    const list = document.getElementById('galleryList');
+    const emptyMsg = document.getElementById('emptyMsg');
+    list.innerHTML = '';
+    if (error || !data || data.length === 0) {
+      emptyMsg.style.display = 'block';
+      return;
+    }
+    emptyMsg.style.display = 'none';
+    data.forEach(g => {
+      const item = document.createElement('div');
+      item.className = 'gitem';
+      item.innerHTML = `
+        <img src="${g.image_url}" alt="">
+                <div class="gitem-info">
+          <p>pos ${g.position ?? '—'}</p>
+          <div class="gitem-actions">
+            <button class="btn" onclick='editPhoto(${JSON.stringify(g).replace(/'/g, "&#39;")})'>Edit</button>
+            <button class="btn btn-danger" onclick="deletePhoto('${g.id}')">Del</button>
+          </div>
+        </div>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  function editPhoto(g) {
+    editingId = g.id;
+    editingImageUrl = g.image_url || null;
+    document.getElementById('gPosition').value = g.position ?? '';
+    document.getElementById('gAlt').value = g.alt_text || '';
+    document.getElementById('currentImgHint').textContent = 'Leave the file field empty to keep the current photo.';
+    document.getElementById('formTitle').textContent = 'Edit Photo';
+    document.getElementById('saveBtn').textContent = 'Save Changes';
+    document.getElementById('cancelEditBtn').style.display = 'inline-block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function resetForm() {
+    editingId = null;
+    editingImageUrl = null;
+    document.getElementById('galleryForm').reset();
+    document.getElementById('currentImgHint').textContent = '';
+    document.getElementById('formTitle').textContent = 'Add New Photo';
+    document.getElementById('saveBtn').textContent = 'Add Photo';
+    document.getElementById('cancelEditBtn').style.display = 'none';
+  }
+  document.getElementById('cancelEditBtn').addEventListener('click', resetForm);
+
+  async function uploadPhoto(file) {
+    const fileName = `${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
+    const { error } = await adminClient.storage.from('gallery').upload(fileName, file);
+    if (error) throw error;
+    const { data } = adminClient.storage.from('gallery').getPublicUrl(fileName);
+    return data.publicUrl;
+  }
+
+  document.getElementById('galleryForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const saveBtn = document.getElementById('saveBtn');
+    const file = document.getElementById('gFile').files[0];
+
+    if (!editingId && !file) {
+      alert('Please choose a photo to upload.');
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+
+    let imageUrl = editingImageUrl;
+    if (file) {
+      try {
+        imageUrl = await uploadPhoto(file);
+      } catch (err) {
+        alert('Upload failed: ' + err.message);
+        saveBtn.disabled = false;
+        saveBtn.textContent = editingId ? 'Save Changes' : 'Add Photo';
+        return;
+      }
+    }
+
+    const posVal = document.getElementById('gPosition').value;
+        const payload = {
+      image_url: imageUrl,
+      alt_text: document.getElementById('gAlt').value,
+      position: posVal ? parseInt(posVal, 10) : null,
+    };
+
+
+    if (editingId) {
+      await adminClient.from('gallery').update(payload).eq('id', editingId);
+    } else {
+      await adminClient.from('gallery').insert([payload]);
+    }
+    resetForm();
+    loadGallery();
+  });
+
+  async function deletePhoto(id) {
+    if (!confirm('Delete this photo?')) return;
+    await adminClient.from('gallery').delete().eq('id', id);
+    loadGallery();
+  }
+</script>
+
+</body>
+</html>
